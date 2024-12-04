@@ -1,207 +1,242 @@
 #include <iostream>
-#include <conio.h>
-#include <windows.h>
 #include <cmath>
-#include <fstream>
-#include <string>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>   // For file handling
+#include <graphics.h> // Graphics library for rendering
 
 using namespace std;
 
-const int width = 30;
-const int height = 30   ;
-
-int planeX, planeY;
-int missile1X, missile1Y;
-int missile2X, missile2Y;
+const int width = 1024;  // Increased screen width
+const int height = 768; // Increased screen height
+int planeX = width / 2, planeY = height / 2;
+int missile1X = rand() % width, missile1Y = rand() % height;
+int missile2X = rand() % width, missile2Y = rand() % height;
 int score = 0;
+int highScore = 0;  // Variable to store high score
 bool gameOver = false;
-float missileSpeed = 1.2f;
-int gameSpeed = 150;
 bool hardMode = false;
-char planeSymbol = '>';
-string playerName;
 
-void Setup();
-void Draw();
-void Input();
-void Logic();
-void Menu();
-void SaveScore(const string& name, int score);
-void ViewScores();
-void SetColor(int color);
-void EndGame();
+const char* highScoreFile = "highscore.txt";
 
-void SetColor(int color) {
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    SetConsoleTextAttribute(hConsole, color);
-}
-
-void Setup() {
-    planeX = width / 2;
-    planeY = height / 2;
-    missile1X = rand() % width;
-    missile1Y = rand() % height;
-    if (hardMode) {
-        missile2X = rand() % width;
-        missile2Y = rand() % height;
+// Load high score from file
+void LoadHighScore() {
+    ifstream file(highScoreFile);
+    if (file.is_open()) {
+        file >> highScore;
+        file.close();
     }
-    score = 0;
-    gameOver = false;
-    planeSymbol = '>';
 }
 
+// Save high score to file
+void SaveHighScore() {
+    ofstream file(highScoreFile);
+    if (file.is_open()) {
+        file << highScore;
+        file.close();
+    }
+}
+
+// Draw the game objects
 void Draw() {
-    system("cls");
-    SetColor(9);
-    for (int i = 0; i < width + 2; ++i) cout << "l";
-    cout << endl;
+    cleardevice(); // Clear screen
 
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width + 2; ++x) {
-            if (x == 0 || x == width + 1) {
-                SetColor(9);
-                cout << "l";
-            } else if (x - 1 == planeX && y == planeY) {
-                SetColor(10);
-                cout << planeSymbol;
-            } else if (x - 1 == missile1X && y == missile1Y) {
-                SetColor(12);
-                cout << "!";
-            } else if (hardMode && x - 1 == missile2X && y == missile2Y) {
-                SetColor(14);
-                cout << "!";
-            } else {
-                cout << " ";
-            }
-        }
-        cout << endl;
-    }
+    // Draw plane
+    setcolor(WHITE);
+    rectangle(planeX, planeY, planeX + 40, planeY + 20); // Plane shape
 
-    SetColor(9);
-    for (int i = 0; i < width + 2; ++i) cout << "l";
-    cout << endl;
+    // Draw missiles
+    setcolor(RED);
+    circle(missile1X, missile1Y, 10);
+    if (hardMode) circle(missile2X, missile2Y, 10);
 
-    SetColor(7);
-    cout << "Player: " << playerName << "  Score: " << score << endl;
+    // Draw score
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 2);
+    char scoreText[50];
+    sprintf(scoreText, "Score: %d", score);
+    outtextxy(10, 10, scoreText);
+
+    delay(20); // Slight delay for smoother rendering
 }
 
-void Input() {
-    if (_kbhit()) {
-        switch (_getch()) {
-            case 'w': if (planeY > 0) planeY--; planeSymbol = '-'; break;
-            case 's': if (planeY < height - 1) planeY++; planeSymbol = '-'; break;
-            case 'a': if (planeX > 0) planeX--; planeSymbol = '<'; break;
-            case 'd': if (planeX < width - 1) planeX++; planeSymbol = '>'; break;
-        }
+// Handle movement
+void MoveMissiles() {
+    // Missile 1
+    int dx1 = planeX - missile1X, dy1 = planeY - missile1Y;
+    float dist1 = sqrt(dx1 * dx1 + dy1 * dy1);
+    missile1X += (int)(2.5 * (dx1 / dist1));
+    missile1Y += (int)(2.5 * (dy1 / dist1));
+
+    // Missile 2 (if in hard mode)
+    if (hardMode) {
+        int dx2 = planeX - missile2X, dy2 = planeY - missile2Y;
+        float dist2 = sqrt(dx2 * dx2 + dy2 * dy2);
+        missile2X += (int)(2.5 * (dx2 / dist2));
+        missile2Y += (int)(2.5 * (dy2 / dist2));
     }
 }
 
-void MoveMissile(int& missileX, int& missileY) {
-    int dx = planeX - missileX;
-    int dy = planeY - missileY;
-    float dist = sqrt(dx * dx + dy * dy);
-    missileX += (int)(missileSpeed * (dx / dist));
-    missileY += (int)(missileSpeed * (dy / dist));
-    if (missileX < 0 || missileX >= width || missileY < 0 || missileY >= height) {
-        missileX = rand() % width;
-        missileY = rand() % height;
-    }
+// Detect collision
+bool CheckCollision() {
+    if (abs(planeX - missile1X) < 20 && abs(planeY - missile1Y) < 20) return true;
+    if (hardMode && abs(planeX - missile2X) < 20 && abs(planeY - missile2Y) < 20) return true;
+    return false;
 }
 
-void Logic() {
-    MoveMissile(missile1X, missile1Y);
-    if (hardMode) MoveMissile(missile2X, missile2Y);
-    if ((missile1X == planeX && missile1Y == planeY) || (hardMode && missile2X == planeX && missile2Y == planeY)) {
-        gameOver = true;
-    }
-    if (planeX < 0 || planeX >= width || planeY < 0 || planeY >= height) gameOver = true;
+// Update game state
+void Update() {
+    MoveMissiles();
+    if (CheckCollision()) gameOver = true;
     score++;
 }
 
-void SaveScore(const string& name, int score) {
-    ofstream outFile("highscore.txt", ios::app);
-    if (outFile.is_open()) {
-        outFile << "Player: " << name << " | Score: " << score << endl;
-        outFile.close();
+// Keyboard input for controlling the plane
+void Input(char key) {
+    switch (key) {
+        case 'w': if (planeY > 0) planeY -= 10; break;
+        case 's': if (planeY < height - 20) planeY += 10; break;
+        case 'a': if (planeX > 0) planeX -= 10; break;
+        case 'd': if (planeX < width - 40) planeX += 10; break;
     }
 }
 
-void ViewScores() {
-    ifstream inFile("highscore.txt");
-    if (inFile.is_open()) {
-        system("cls");
-        string line;
-        cout << "==== Saved Scores ====" << endl;
-        while (getline(inFile, line)) {
-            cout << line << endl;
-        }
-        inFile.close();
+// Main game loop
+void GameLoop() {
+    if (!gameOver) {
+        Update();
+        Draw();
     } else {
-        cout << "No scores found or error opening file." << endl;
+        cleardevice();
+        settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+        const char* gameOverMessage = "Game Over!";
+        outtextxy(width / 2 - 100, height / 2, (char*)gameOverMessage); // Cast to char*
+        char finalScore[50];
+        sprintf(finalScore, "Score: %d", score);
+        outtextxy(width / 2 - 100, height / 2 + 50, finalScore);
+
+        if (score > highScore) {
+            highScore = score;
+            SaveHighScore();  // Save the new high score
+        }
+
+        char highScoreText[50];
+        sprintf(highScoreText, "High Score: %d", highScore);
+        outtextxy(width / 2 - 100, height / 2 + 100, highScoreText);
+
+        const char* restartMessage = "Click to Restart or Click on Quit";
+        outtextxy(width / 2 - 150, height / 2 + 150, (char*)restartMessage);
+
+        // Wait for user input to restart or quit
+        int mouseX, mouseY;
+        while (true) {
+            if (ismouseclick(WM_LBUTTONDOWN)) {
+                getmouseclick(WM_LBUTTONDOWN, mouseX, mouseY);
+                // Check if within restart button
+                if (mouseX >= width / 2 - 150 && mouseX <= width / 2 + 150 &&
+                    mouseY >= height / 2 + 150 && mouseY <= height / 2 + 180) {
+                    gameOver = false;
+                    score = 0;
+                    planeX = width / 2;
+                    planeY = height / 2;
+                    missile1X = rand() % width;
+                    missile1Y = rand() % height;
+                    missile2X = rand() % width;
+                    missile2Y = rand() % height;
+                    break;
+                } 
+                // Check if within quit button
+                else if (mouseX >= width / 2 - 150 && mouseX <= width / 2 + 150 &&
+                    mouseY >= height / 2 + 200 && mouseY <= height / 2 + 230) {
+                    closegraph();
+                    exit(0);
+                }
+            }
+        }
     }
-    system("pause");
 }
 
-void EndGame() {
-    cout << "Game Over! Final Score: " << score << endl;
-    SaveScore(playerName, score);
-    cout << "Your score has been saved." << endl;
-    system("pause");
-}
+// Display the menu in the top left corner
+void ShowMenu() {
+    cleardevice();
+    settextstyle(SIMPLEX_FONT, HORIZ_DIR, 2); // Medium font size
 
-void Menu() {
-    int choice;
-    bool running = true;
-    while (running) {
-        system("cls");
-        cout << "==== Plane and Missile Game ====\n";
-        cout << "1. Start Game (Easy)\n";
-        cout << "2. Start Game (Hard)\n";
-        cout << "3. View Scores\n";
-        cout << "4. Exit\n";
-        cout << "Select an option: ";
-        cin >> choice;
-        switch (choice) {
-            case 1:
-                cout << "Enter your name: ";
-                cin >> playerName;
-                hardMode = false;
-                Setup();
+    // Display the title
+    const char* menuTitle = "Plane Apocalypse";
+    outtextxy(10, 10, (char*)menuTitle); // Top-left corner
+
+    // Display menu options
+    const char* startGameOption = "Start Game";
+    outtextxy(10, 40, (char*)startGameOption);
+
+    const char* highScoreOption = "High Score";
+    outtextxy(10, 70, (char*)highScoreOption);
+
+    const char* exitOption = "Quit";
+    outtextxy(10, 100, (char*)exitOption);
+
+    // Wait for mouse click
+    int mouseX, mouseY;
+    while (true) {
+        if (ismouseclick(WM_LBUTTONDOWN)) {
+            getmouseclick(WM_LBUTTONDOWN, mouseX, mouseY);
+            // Check if within Start Game button
+            if (mouseX >= 10 && mouseX <= 200 && mouseY >= 40 && mouseY <= 70) {
+                gameOver = false;
+                score = 0;
+                planeX = width / 2;
+                planeY = height / 2;
+                missile1X = rand() % width;
+                missile1Y = rand() % height;
+                missile2X = rand() % width;
+                missile2Y = rand() % height;
                 while (!gameOver) {
-                    Draw();
-                    Input();
-                    Logic();
-                    Sleep(gameSpeed);
+                    if (kbhit()) {
+                        char key = getch();
+                        Input(key);
+                    }
+                    GameLoop();
                 }
-                EndGame();
-                break;
-            case 2:
-                cout << "Enter your name: ";
-                cin >> playerName;
-                hardMode = true;
-                Setup();
-                while (!gameOver) {
-                    Draw();
-                    Input();
-                    Logic();
-                    Sleep(gameSpeed);
+                ShowMenu(); // Go back to menu after game ends
+            }
+            // Check if within High Score button
+            else if (mouseX >= 10 && mouseX <= 200 && mouseY >= 70 && mouseY <= 100) {
+                cleardevice();
+                settextstyle(SIMPLEX_FONT, HORIZ_DIR, 2); // Medium font size
+                char highScoreText[50];
+                sprintf(highScoreText, "High Score: %d", highScore);
+                outtextxy(width / 2 - 100, height / 2, highScoreText);
+                const char* backOption = "Click to go back to the menu";
+                outtextxy(width / 2 - 150, height / 2 + 50, (char*)backOption);
+                while (true) {
+                    if (ismouseclick(WM_LBUTTONDOWN)) {
+                        getmouseclick(WM_LBUTTONDOWN, mouseX, mouseY);
+                        if (mouseX >= width / 2 - 150 && mouseX <= width / 2 + 150 &&
+                            mouseY >= height / 2 + 50 && mouseY <= height / 2 + 80) {
+                            ShowMenu();
+                            break;
+                        }
+                    }
                 }
-                EndGame();
-                break;
-            case 3:
-                ViewScores();
-                break;
-            case 4:
-                running = false;
-                break;
-            default:
-                cout << "Invalid option. Please try again.\n";
-                system("pause");
+            }
+            // Check if within Exit button
+            else if (mouseX >= 10 && mouseX <= 200 && mouseY >= 100 && mouseY <= 130) {
+                closegraph();
+                exit(0);
+            }
         }
     }
 }
 
 int main() {
-    Menu();
+    // Initialize graphics window
+    int gd = DETECT, gm;
+    const char* path = "";
+    initgraph(&gd, &gm, (char*)path); // Cast to char*
+
+    LoadHighScore();  // Load the high score from file
+
+    ShowMenu();  // Show the main menu
+
+    closegraph();
     return 0;
 }
